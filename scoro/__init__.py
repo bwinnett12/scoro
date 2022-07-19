@@ -1,1 +1,1 @@
-from .scoro import Scoro, Index
+from .scoro import Scoro

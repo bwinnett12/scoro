@@ -34,6 +34,7 @@ class Scoro:
     """
     Method for adding a term to an index
     """
+
     def paste(self, index, term):
         index_to_add_to = None
         for item in self.indexes:
@@ -44,11 +45,12 @@ class Scoro:
             print("While pasting: Index {} not found".format(index))
             return False
 
-        index_to_add_to.add(term)
+        index_to_add_to.add(Term(term))
 
     """
     Method for writing all contents to their folder
     """
+
     def settle(self):
         for ind in self.indexes:
             ind.write_contents()
@@ -57,6 +59,7 @@ class Scoro:
     Adds an index, creates the file
     Takes either a string or an array
     '''
+
     def add_index(self, title, order=-1):
         # If not empty...
         if not title:
@@ -68,13 +71,13 @@ class Scoro:
 
         # If a single record...
         if type(title) == str:
-            if not self.is_already_in_index(title):
+            if not self.is_index(title):
                 self.indexes.append(Index(title, self.location, order))
 
         # Else a multiple
         elif type(title) == list:
             for ind in title:
-                if not self.is_already_in_index(ind):
+                if not self.is_index(ind):
                     self.add_index(ind, order=-1)
 
         else:
@@ -85,6 +88,7 @@ class Scoro:
     """
     Remove an index. Deletes the file - Alternatively, manually delete
     """
+
     def delete_index(self, title):
         if not title:
             print("While attempting to delete Index: title left blank")
@@ -113,18 +117,21 @@ class Scoro:
     """
     Returns a list of the names of all indexes
     """
+
     def get_indexes_list(self):
         return self.indexes
 
     """
     Returns a list of the names of each index
     """
+
     def get_indexes_names(self):
         return [obj.title.split("_")[0] for obj in self.get_indexes_list()]
 
     """
     Returns first open order
     """
+
     def get_open_order(self):
         taken_orders = []
         for ind in self.get_indexes_list():
@@ -140,13 +147,13 @@ class Scoro:
     """
     Refreshes the indexes to whatever is already added in the indexes folder
     """
+
     def refresh_indexes_list(self):
         ## First section registers all indexes found locally
         all_index_addresses = []
         all_abridged_addresses = []
 
         for file in glob.glob(self.location + "*.lst"):
-
             abridged = Path(file).stem.split("_")[0]
             if abridged not in all_abridged_addresses:
                 all_abridged_addresses.append(abridged)
@@ -157,7 +164,6 @@ class Scoro:
             if addre not in current_index_addresses:
                 split_addr = Path(addre).stem.split("_")
                 self.add_index(split_addr[0], order=int(split_addr[1]))
-
 
         # Sort list of indexes by order
         self.indexes.sort(key=lambda x: x.order)
@@ -174,7 +180,6 @@ class Scoro:
                 except KeyError:
                     break
 
-
         for ind, key in enumerate(local_files_dict):
 
             ind_to_add = list(set(local_files_dict[key]))
@@ -187,7 +192,7 @@ class Scoro:
     """
     Retrieves a dictionary with content from each index
     """
-    def get_all_contents(self):
+    def get_contents(self):
         content_to_return = {}
         for ind in self.indexes:
             if ind.title not in content_to_return:
@@ -197,31 +202,56 @@ class Scoro:
     """
     Returns the content of an index
     """
-    def get_index_content(self, title):
+    def get_content_index(self, title):
         return self.indexes[self.get_indexes_names().index(title)].contents
 
     '''
     Returns a bool of whether the potential new index is already found
     @bool
     '''
-    def is_already_in_index(self, title):
+    def is_index(self, title):
         for ent in self.indexes:
             if title.lower() == ent.title.lower():
                 return True
         return False
 
+    """
+    Prints the contents of each index
+    """
     def post(self):
         print("Each file and its contents")
-        r = self.indexes
+        # Calls post method of each index
         for i in self.indexes:
             i.post()
             if i != self.indexes[-1]:
                 print("")
 
+    """
+    Retrieves each file that is marked
+    """
+    def pull(self):
+        terms_to_get = {int(self.indexes[x].order): [] for x in range(len(self.indexes))}
+
+        for i, index in enumerate(self.indexes):
+            for term in index.contents:
+                terms_to_get[i].append(term)
+
+        files_of_interest = []
+        for file in glob.glob(self.storage):
+            split_term = Path.stem.split("_")
+
+            for i in range(len(split_term)):
+                if split_term[i] in terms_to_get[i]:
+                    files_of_interest.append(file)
+
+        return files_of_interest
+
 
 """
 Index: The files that are being tracked
 """
+
+
 class Index:
     def __init__(self, title, root, order):
         self.title = title
@@ -238,24 +268,28 @@ class Index:
     """
     Gets the address of the Index
     """
+
     def path(self):
         return self.address
 
     """
     Adds a term to the index
     """
+
     def add(self, term):
-        self.contents.append(str(term).lower())
+        self.contents.append(Term(term))
 
     """
     Returns what index the index is
     """
+
     def get_order(self):
         return self.order
 
     """
     
     """
+
     def reset_contents(self):
         filee = open(self.address, "w")
         self.contents = []
@@ -264,25 +298,27 @@ class Index:
         contents = []
         filee = open(self.address, "r")
         for line in filee.readlines():
-            appended_line = line.lstrip(";").replace("\n", "")
-            if appended_line:
-                contents.append(appended_line)
+            appended_line = line.replace("\n", "")
 
-        contents.sort(key=str.lower)
+            if appended_line.lstrip(";"):
+                contents.append(Term(term=appended_line, unchecked=line[0] == ';'))
+
+        contents.sort(key=lambda x: x.term)
         return contents
 
     """
-
+    Sorts all contents
     """
+
+    # TODO - SOrt this
     def sort_contents(self):
-        contents = self.contents
-        contents = list(set(contents))
-        contents.sort()
-        self.contents = contents
+        self.contents = list(set(self.contents)).sort
 
     """
     Write the contents to the file
     """
+
+    # TODO - SOrt this
     def write_contents(self):
         self.sort_contents()
         filee = open(self.address, "w")
@@ -292,9 +328,9 @@ class Index:
     """
     Prints the contents of the all indexes
     """
-    def post(self):
-        print("For: {}".format(self.title))
 
+    # TODO - SOrt this
+    def post(self):
         line = []
         for term in self.contents:
 
@@ -302,12 +338,45 @@ class Index:
             if len(line) == 4:
                 print(" ".join(line))
                 line = []
-        if line != []:
+
+        if line:
             print(" ".join(line))
 
+    def is_in_index(self, term):
+        return term.lower() in self.contents
 
+
+class Term:
+    def __init__(self, term, unchecked=False):
+        self.term = term
+        self.unchecked = unchecked
+
+    def get_term(self):
+        return self.term
+
+    def is_unchecked(self):
+        return self.unchecked
+
+    def check(self):
+        self.unchecked = False
+
+    def uncheck(self):
+        self.unchecked = True
 
 
 if __name__ == '__main__':
     p1 = Scoro(initialized_titles=["First", "Second"])
     p1.post()
+
+# TODO
+'''
+Allow checking via python commands
+    Allow different data formats
+Comment Term
+Comment Index
+Comment Scoro
+Hook up tests
+Optional Settling
+
+
+'''
