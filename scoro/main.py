@@ -1,10 +1,16 @@
+from random import randrange
+
 import scoro
 
 def main():
     p1 = scoro.Scoro()
-    p1.add_index(["first", "secon", "theird"])
-    p1.refresh_indexes_list()
-    p1.post()
+
+    test = p1.get_contents()
+
+    print(test)
+
+    # p1.reset()
+
 
 if __name__ == '__main__':
     main()
