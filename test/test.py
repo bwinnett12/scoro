@@ -1,9 +1,7 @@
-import itertools
 import unittest
 import random
 
 from scoro import Scoro
-import test
 import os
 
 

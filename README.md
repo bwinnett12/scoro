@@ -1,114 +1,106 @@
 # Scoro
+Hello everyone! Scoro is a Python library for handling data by their file titles.
+Scoro handles and creates files based on user defined attributes while tracking those with similar attributes.
 
-Hello~! Welcome to Scoro! Scoro is a framework for handling files by their name and retrieving groups of files based on selected names.
-This package is great for storing a large amount of files as a database bound in a folder. 
-The different attributes of each file is logged by variant of that name.
+If you had a recipe folder, you could track the recipes based on type of dish, main ingredient, rating, etc.
+If you were working with a folder of books, you could track the author, title, year, rating, if you have read, etc. 
+There would then be a text file log that contains each entry of that type. 
 
-#### Quick guide
-```
-sco = scoro.Scoro(storage="./storage/", index_location="./indexes/", output="./output/",
-                 initialized_titles=None, reset=True, close=True)  
-# Initialize scoro
-# Storage = location of files to be tracked. Defaults to "./storage/"
-# logs = Location for registering each log of found attributes
-# output = If there is anywhere you want to pull your files to
-# initialized_titles = If you want to add a log for tracking upon initialization
-# reset = If you want to reset the logs (to an untouched, all check state)
-# close = autosettle upon each action. Don't tamper unless you know what you're doing
-
-sco.add_log(title, order=-1):
-# Adds a log
-# order tracks which term in the file name to track for this log
-
-sco.settle()
-# Finalizes changes
-
-sco.delete_log(title)
-# Deletes a log
-
-sco.get_logs_names()
-# Returns names of all logs
-
-sco.refresh_logs_list()
-# Refreshes the logs based on what is in storage
-
-sco.get_contents()
-# Returns a dictionary of the contents of all logs
-```
-
-
-#### Case Study
-Imagine you had a bunch of word documents containing dessert recipes.
-You have cakes, pies, and tortes in a few different flavors including blueberry, carmel, apple, huckleberry, and cherry.
-You tried these pies and devised a star system with 0 = untested, 1 = edible, 2 = very delicious.
-Each recipe would be categorized with the system of type_flavor_stars.
-
-Inside your folder of desserts, there would be a folder full of .lst files.
-Each file would hold all of that type found in storage.
-So... 'fruit_2.lst' would hold blueberry, huckleberry, etc.
-'stars_3.lst' would hold all possible star values (0, 1, 2).
-Each term would be prepositioned with a semi-colon (;).
-
-You can initialize scoro by calling:
-```
-p1 = scoro.Scoro()
-```
-
-Now let's say that you wanted all pie recipes made of blueberry or cherry that were two stars or more.
-With that, you could manually find the indexes and unmark the desired traits.
-So, in the indexes you would see something like this for type of dessert:
+Following our dessert recipe library example:
+A log would track each dish, main ingredient, and rating. 
+If we were bakers, a log of dishes might look like this:
 ```
 ;cake
+;custard
+;parfait
 pie
-;tarte
-```
-Notice how 'pie' is unchecked. 
-This signals to Scoro to pull any pies.
-For flavors, we can do the same:
-```
-;apple
-blueberry
-;carmel
-cherry
-```
-This will find any blueberry and cherry desserts.
-You can do the same with two stars or more stars.
-Alternatively, if you don't want to be working with editing text files or if there are many entries that you want to work with;
-you can edit them by calling methods such as:
-```
-to_uncheck = ['blueberry', 'cherry', 'pie', '2']
-p1.uncheck(to_uncheck)
+;syrup
+tarte
 ```
 
-If you changed your mind about having two stars only, you can easily re-check it.
-Also, you can optionally select which index:
+Each dessert recipe stored would look have this format and look like this:
 ```
-p1.check('2', 'stars')
-```
-
-Now from there, you can pull them. 
-There are two ways to do it, 
-you can either pull the files, or move the files somewhere.
-With no matching, it pulls everything that meets one of the requirements.
-```
-p1.pull()
-['./storage/pie_cherry_1.txt', './storage/pie_cherry_2.txt', './storage/pie_carmel_0.txt', './storage/pie_carmel_1.txt', './storage/cake_blueberry_1.txt', './storage/cake_blueberry_0.txt', './storage/pie_carmel_2.txt', './storage/pie_apple_1.txt', './storage/pie_apple_2.txt', './storage/pie_blueberry_2.txt', './storage/pie_blueberry_2.txt', './storage/pie_blueberry_0.txt', './storage/pie_blueberry_0.txt', './storage/pie_huckleberry_2.txt', './storage/tarte_blueberry_1.txt', './storage/tarte_blueberry_2.txt']
+dessert-type_main-ingredient_rating.ext
+pie_blueberry_3.txt
+## a three start blueberry pie recipe
 ```
 
-Too many recipes that aren't what we want. 
-If we only wanted recipes that fit our parameters
-AND we wanted to send that to our to-make folder somewhere on our machine:
+Notice in the log example above, some entries have a ``;`` check in front while some do not.
+Those that are checked with a ``;`` are not selected and those that do not have a check are selected.
+This is a handy feature of Scoro in that you could select all recipes of only a type, ingredient, and rating.
+If you wanted only the highest stars; you could set your ratings log up to look like:
 ```
-to-make-folder = "~/to-make-example-folder/"
-p1.pull(match=True, send=True, output=to-make-folder)
-['./storage/pie_blueberry_2.txt'] sent to ~/to-make-example-folder/
+;1
+;2
+3
 ```
-There we go! One blueberry pie recipe!
-You can repeat the whole process to pull anything you want anywhere you want.
-If you set the indexes up in a way that you don't feel like fixing;
-theres a fix for that!
-Simply reset-indexes by calling:
+
+This would only gather 3 / 3 star recipes.
+To gather the recipes, you would need to use the pull command. 
+Pulling will return the file locations for each recipe or transfer all the files to an desired output location.
+
+
+## Installation
+Use the package manager pip to install Scoro.
 ```
-p1.reset()
+pip install Scoro
 ```
-There ya go! A crash course on Scoro.
+
+## Usage
+
+```
+import Scoro
+
+# Initializes scoro
+scoro_example = scoro.Scoro()
+
+## Or with all possible options
+## Storage - Path of Storage
+## logs - Path of logs folder
+## output - Path of output folder
+## titles - Adds logs from title of string or list of strings
+## reset - Reset all logs
+## close - Autosettles (leave on)
+## send - Sets pull to auto move files to output folder
+scoro_example = scoro.Scoro(storage="./storage/", logs="./logs/", output="./output/",
+                 titles=None, reset=False, close=True, send=False)
+
+
+# Adds a log(s)
+## title - string or list of strings for logs to add
+scoro_example.add_log(title)
+
+# Deletes a log
+## title - string or list of strings for logs to delete
+scoro_example.delete_log(title)
+
+# Returns a dictionary of the log content
+## title - string for log to return
+scoro_example.get_log_content(title)
+
+# Prints the contents of all logs
+scoro_example.post()
+
+# Creates a new file in storage based on your inputs
+## Attributes - a list of terms for the filename (term1_term2_term-n)
+## Content - The text within the document
+## Extension - Default .txt
+scoro_example.create(attributes, content, extention="txt")
+
+# Pulls
+## match - If you want the pull content to match only exactly what is unchecked
+## send - If you want to pull content to your output folder
+## output - Path of alternative output folder
+scoro_example.pull(match=False, send=False, output="")
+
+# Check / Unchecks a term
+## Terms - String or list of strings to (un)check
+## log - Optional specified log
+scoro_example.check(terms, log="")
+scoro_example.uncheck(terms, log="")
+
+# Reset all logs
+scoro_example.reset()
+```
+
+

@@ -1,14 +1,16 @@
+import copy
 import glob
 import operator
 import os
 import shutil
+import sys
 from enum import Enum
 from pathlib import Path
 
 
 class Scoro:
     def __init__(self, storage="./storage/", logs="./logs/", output="./output/",
-                 initialized_titles=None, reset=True, close=True):
+                 initialized_titles=None, reset=False, close=True, send=False):
         """
         Scoro is a system for tracking of text based logs. Each log is a text file that contains multiple entries
         storing details about the file name.
@@ -21,9 +23,11 @@ class Scoro:
         :param initialized_titles: [Optional] If you want to create any new logs
         :param reset: [Optional] If you want to reset the log contents on startup (Does not delete any files)
         :param close: [Optional] Upon closing of the program, will autoset unless told not to
+        :param send: [Optional] Upon pull, send all files to the 'output' folder
         """
         self.logs = {}
         self.close = close
+        self.send = send
 
         if storage:
             self.location_storage = storage.rstrip("/") + "/"
@@ -44,22 +48,42 @@ class Scoro:
         Path(self.location_storage).mkdir(parents=True, exist_ok=True)
         Path(self.location_output).mkdir(parents=True, exist_ok=True)
 
+        # Creates logs for any titles you want
         if initialized_titles:
             self.add_log(initialized_titles)
 
-        self.reset(storage=reset, logs=True)
+        # Sets up logs by default, also resets storage upon reset
+        self.renew(storage=reset, logs=True)
+        if reset:
+            self.reset()
 
+    # Settles contents to each log upon close
     def __del__(self):
         if self.close:
             self.settle()
 
     def get_storage_path(self) -> str:
+        """
+        Returns path of folder for storage
+
+        :return: Path of folder for storage
+        """
         return self.location_storage
 
     def get_logs_path(self) -> str:
+        """
+        Returns path of folder for logs
+
+        :return: Path of folder for logs
+        """
         return self.location_logs
 
     def get_output_path(self) -> str:
+        """
+        Returns path of folder for outputted / pulled files
+
+        :return: Path of folder for outputted / pulled files
+        """
         return self.location_output
 
     def settle(self):
@@ -76,6 +100,7 @@ class Scoro:
         :param boolean generate: If you want to generate contents
         :param str or list[str] title: The title of the new log
         :param int order: [Optional] specifies what rank to assign to the Log. Unspecified will use the first possible
+        :param boolean generate: [Optional] Generates the log from storage content
         """
         # If not empty...
         if not title:
@@ -90,22 +115,20 @@ class Scoro:
         # Fill in gaps with negative -1
         order = order + [-1] * ((len(title) - len(order)) * (len(title) - len(order) > 0))
 
-        # If a single record...
+        # For each in list of titles
         for i in range(len(title)):
             if title[i] not in self.logs.keys():
                 # If the order wasn't manually specified
                 if order[i] == -1:
                     order[i] = self.get_open_order()
 
+                # Creates the log then adds
                 log_to_add = Log(title[i], self.location_logs, order[i])
                 self.logs[title[i]] = log_to_add
 
                 # Refresh this log only
                 if generate:
-                    self.reset(storage=False, logs=False, log_by_name=title)
-
-
-
+                    self.renew(storage=False, logs=False, log_by_name=title)
 
     def delete_log(self, title="", all=False):
         """
@@ -118,12 +141,14 @@ class Scoro:
             print("Please specify a log or add \"all=True\" to parameters to delete all logs")
             return False
 
+        # Deletes all logs found
         if all:
             title = self.get_logs_names()
 
         if type(title) != list:
             title = [title]
 
+        # For each in list of titles to delete
         for ttitl in title:
             if ttitl in self.logs.keys():
                 os.remove(self.logs[ttitl].address)
@@ -133,11 +158,11 @@ class Scoro:
                 print("While attempting to delete log: log name \"{}\" not found".format(title))
                 return False
 
-
     def get_logs_dict(self) -> dict:
         """
         Returns a dictionary of all logs, the titles and the log object
 
+        :return: Dictionary containing each log
         :rtype: dict
         """
         return self.logs
@@ -146,6 +171,7 @@ class Scoro:
         """
         Returns a list of the names of each logs
 
+        :return: list of names
         :rtype: list[str]
         """
         return list(self.logs.keys())
@@ -170,20 +196,20 @@ class Scoro:
         else:
             return len(taken_orders) + 1
 
-    def reset(self, storage=True, logs=True, log_by_name=""):
+    def renew(self, storage=True, logs=False, log_by_name=""):
         """
         Load or reloads logs from files and opens logs
-        :param log_by_name:
-        :param logs:
-        :param storage:
-        :return:
+        :param log_by_name: A specific log that you want to renew
+        :param logs: Log(s) to fill
+        :param storage: Fill log(s) or all logs with storage contents
         """
-        def load_logs(self):
+
+        def load_logs(self, generate=True):
             """
             Refreshes the logs based on what is currently in the storage
             """
             # Renews (again) each log based on what was stored in the text file
-            ## First section registers all logs found locally
+            # First section registers all logs found locally
             all_log_addresses = []
             all_abridged_addresses = []
             current_log_addresses = [o.address for o in self.get_logs_dict().values()]
@@ -199,11 +225,7 @@ class Scoro:
             for addre in all_log_addresses:
                 if addre not in current_log_addresses:
                     split_addr = Path(addre).stem.split("_")
-                    self.add_log(split_addr[0], order=int(split_addr[1]), generate=False)
-
-            # After getting each log registered, iterates through each log and then adds each term
-            for log in self.logs.values():
-                log.grab_contents()
+                    self.add_log(split_addr[0], order=int(split_addr[1]), generate=generate)
 
         def fill_logs(self, logs=""):
             """
@@ -211,61 +233,84 @@ class Scoro:
             Rewrites the contents
             :param self: The Scoro object
             :param logs: str or list[str]
-            :return:
             """
             # Local storage - Retrieving all files in the local files
-            # Loads only a log
-
+            # Loads only a logs
             if not logs:
-                local_files_dict = {int(self.logs[x].get_order()): [] for x in self.logs}
+                local_files_dict = {int(self.logs[x].get_order()): {} for x in self.logs}
             else:
                 local_files_dict = {}
                 if type(logs) != list:
-                    log = [logs]
+                    logs = [logs]
 
+                # Gets the orders from each log
                 log_orders = []
                 for log in logs:
                     if log in self.logs:
                         log_orders.append(self.logs[log].get_order())
-                local_files_dict = {int(x): [] for x in log_orders}
+                local_files_dict = {int(x): {} for x in log_orders}
 
+            # Accumulation of all files for storage
             for file in glob.glob(self.location_storage + "*"):
-                full_term = Path(file).stem.split("_")
+
+                stripped_files = Path(file).stem.split("__", 1)[0]
+                full_term = stripped_files.split("_")
 
                 # Adds each occurrence of a term to a dictionary
                 for log_num, value in enumerate(full_term):
                     if not value:
                         continue
-                    if log_num in local_files_dict:
-                            local_files_dict[log_num + 1].append(value)
+                    if log_num + 1 in local_files_dict:
+                        local_files_dict[log_num + 1][value] = Term.checked
+
+            # Gets all contents of currently in logs
+            log_dict = {}
+            dict_of_all_log_contents = {}
+            for log in self.logs.values():
+                log_dict[log.get_order()] = log.grab_contents()
+
+            for orde, grabbed_contents in local_files_dict.items():
+                dict_of_all_log_contents[orde] = {}
+                for term in grabbed_contents.keys():
+
+                    if orde in log_dict and term in log_dict[orde]:
+                        dict_of_all_log_contents[orde][term] = log_dict[orde][term]
+                    else:
+                        dict_of_all_log_contents[orde][term] = Term.checked
 
             # Add terms to order
-            for orde, terms in local_files_dict.items():
-                terms = list(set(terms))
+            for orde, sub_log_dict in dict_of_all_log_contents.items():
+
+                unchecked_items = list(set([k for k, v in sub_log_dict.items() if v == Term.unchecked]))
+                checked_items = list(set([k for k, v in sub_log_dict.items() if v == Term.checked]))
+
                 log_to_add = self.get_log_by_order(orde)
-                log_to_add.add(terms, checked=True)
+                if checked_items:
+                    log_to_add.add(checked_items, checked=True)
+                if unchecked_items:
+                    log_to_add.add(unchecked_items, checked=False)
 
             if self.close:
                 self.settle()
 
         if logs:
-            load_logs(self)
-        if storage:
+            load_logs(self, not storage)
+        if storage or log_by_name:
             fill_logs(self, log_by_name)
-
 
     def get_log_by_order(self, order):
         """
         Returns the log for an order
         :param order:
         :return: Log belonging to param order
+        :rtype: Log
         """
         for indx in self.logs.values():
             if order == indx.get_order():
                 return indx
         return None
 
-    def get_log_content(self, title):
+    def get_log_content(self, title) -> dict:
         """
         Returns the content of an log
         If the log doesn't exist, returns an empty dictionary
@@ -278,10 +323,10 @@ class Scoro:
         else:
             return {}
 
-    def is_log(self, title):
+    def is_log(self, title) -> bool:
         """
         Returns a bool of whether the potential new log is already found
-        :returns if the log exists
+        :return: if the log exists
         """
         return title in self.logs.keys()
 
@@ -289,17 +334,11 @@ class Scoro:
         """
         Prints all contents of all logs
         """
-        print("Each file and its contents")
-        i = 0
-
         # Calls post method of each log
         for indx in sorted(self.logs.values(), key=operator.attrgetter('order')):
             indx.post()
-            i += 1
-            if i != len(self.logs):
-                print("")
 
-    def pull(self, match=False, send=True, output=""):
+    def pull(self, match=False, send=False, output=""):
         """
         Retrieves each file that is unmarked
         :param send: Sends all files to output
@@ -312,21 +351,23 @@ class Scoro:
         # Fills dictionary by order: [terms to get]
         for indx in self.logs.values():
             for term, czeched in indx.get_contents().items():
-                if czeched == Termzoso.unchecked:
+                if czeched == Term.unchecked:
                     terms_to_get[indx.order].append(term)
 
+        # Goes through each file in storage
         files_of_interest = []
         for file in glob.glob(self.location_storage + "*"):
             split_term = Path(file).stem.split("_")
 
-            # If match, the output will be specific to only what's in the matching
+            # If matched, the output will be specific to only what's in the matching
             if match:
                 for i in range(len(split_term)):
                     try:
-                        if not terms_to_get[i+1]:
+                        if not terms_to_get[i + 1]:
                             continue
 
-                        if split_term[i] not in terms_to_get[i+1]:
+                        # Every term is specific in match
+                        if split_term[i] not in terms_to_get[i + 1]:
                             break
                     except KeyError:
                         pass
@@ -337,13 +378,13 @@ class Scoro:
             else:
                 for i in range(len(split_term)):
                     try:
-                        if split_term[i] in terms_to_get[i+1]:
+                        if split_term[i] in terms_to_get[i + 1]:
                             files_of_interest.append(file)
                     except KeyError:
                         pass
 
         # Outputs to folder
-        if send:
+        if send or self.send:
             if not output:
                 output = self.location_output
 
@@ -410,9 +451,7 @@ class Scoro:
         for indx in log:
             if indx in self.logs:
                 _indx = self.logs[indx]
-                for trm in _indx.get_contents():
-                    if trm in terms:
-                        trm.uncheck()
+                _indx.uncheck(terms)
 
             else:
                 continue
@@ -438,14 +477,11 @@ class Scoro:
         for indx in log:
             if indx in self.logs:
                 _indx = self.logs[indx]
-                for trm in _indx.get_contents():
-                    if trm in terms:
-                        trm.uncheck()
-
+                _indx.check(terms)
             else:
                 continue
 
-    def create(self, attributes, content, extension="txt"):
+    def create(self, attributes, content, extension=""):
         """
         Creates a file with attributes as a title, content for content, and an extension
 
@@ -458,24 +494,40 @@ class Scoro:
             attributes = [attributes]
 
         attributes = [str(x) for x in attributes]
+        if not extension:
+            extension = ".txt"
+        else:
+            extension = "." + extension.lstrip(".")
 
-        file_stem = "_".join(attributes) if len(attributes) > 1 else ''.join(attributes)
-        extension = "." + extension.lstrip(".")
-        pathh = self.location_storage + file_stem
+        found = False
+        pathh = ""
+        i = 0
+        while not found:
+            file_stem = "_".join(attributes) if len(attributes) > 1 else ''.join(attributes)
+            if i > 0:
+                file_stem += f"__{i}"
 
-        if os.path.exists(pathh + extension):
-            found = False
-            i = 2
-            pathh = pathh + f"-{i}"
-            while found is False:
-                if os.path.exists(pathh + extension):
-                    i += 1
+            pathh = self.location_storage + file_stem + extension
+            if not os.path.exists(pathh):
+                found = True
+
+            else:
+                if i == 0:
+                    i = 2
                 else:
-                    found = True
-        pathh += extension
+                    i += 1
 
         file = open(pathh, "w")
         file.write(str(content))
+
+        logs_by_order = [x for x in self.logs.values()]
+        logs_by_order.sort(key=lambda f: f.order)
+
+        # Adds each attribute to their logs
+        for i in range(len(logs_by_order)):
+            if i > len(attributes) - 1:
+                break
+            logs_by_order[i].add(attributes[i])
 
     def clear(self):
         """
@@ -495,7 +547,11 @@ class Scoro:
 class Log:
     """
     Log: The files that are being tracked
+    :param title: Title of the log
+    :param root: The folder containing the log
+    :param order: The order that is tracked from the attributes
     """
+
     def __init__(self, title, root, order):
         self.title = title
         self.order = order
@@ -504,9 +560,8 @@ class Log:
         # Creates a new file
         Path(self.address).touch(exist_ok=True)
 
-        # Resets the files then leaves blank
-        self.contentszoso = {}
-        # self.reset_contents()
+        # Initializes contents
+        self.contents = {}
 
     def path(self) -> str:
         """
@@ -515,7 +570,7 @@ class Log:
         return self.address
 
     def get_contents(self) -> dict:
-        return self.contentszoso
+        return self.contents
 
     def add(self, terms, checked=True):
         """
@@ -529,8 +584,8 @@ class Log:
 
         for _trm in terms:
             _trm = str(_trm)
-            if _trm not in self.contentszoso.keys():
-                self.contentszoso[_trm] = checked
+            if _trm not in self.contents.keys():
+                self.contents[_trm] = Term.checked if checked else Term.unchecked
 
     def get_order(self) -> int:
         """
@@ -550,7 +605,7 @@ class Log:
         checked_bias = True if ((checked or unchecked) and (checked is not unchecked)) else False
 
         if checked_bias:
-            bias = Termzoso.checked if checked else Termzoso.unchecked
+            bias = Term.checked if checked else Term.unchecked
 
             for term, czeched in self.contents.items():
                 if czeched == bias:
@@ -566,19 +621,19 @@ class Log:
         Deletes everything in the log
         """
         filee = open(self.address, "w")
-        self.contentszoso = {}
+        self.contents = {}
 
     def check_all_contents(self):
         """
         Resets the log so that every term is checked
         """
-        for key, value in self.contentszoso.items():
-            self.contentszoso[key] = Termzoso.checked
+        contents_copy = copy.deepcopy(self.contents)
+        for key, value in contents_copy.items():
+            self.contents[key] = Term.checked
 
     def grab_contents(self):
         """
         Grabs the contents of a log from the file
-        :returns: List(str)
         """
         contents = {}
         filee = open(self.address, "r")
@@ -587,10 +642,11 @@ class Log:
             appended_line = line.replace("\n", "")
 
             if appended_line:
-                contents[appended_line.lstrip(";")] = Termzoso.checked if appended_line[0] == ';' else Termzoso.unchecked
+                contents[appended_line.lstrip(";")] = Term.checked if appended_line[0] == ';' else Term.unchecked
 
         filee.close()
-        self.contentszoso = contents
+        # self.contents = contents
+        return contents
 
     def write_contents(self):
         """
@@ -598,8 +654,16 @@ class Log:
         Done on settle
         """
         filee = open(self.address, "w")
-        for term, czeched in self.contentszoso:
-            line_to_write = ''.join([';' if czeched == Termzoso.checked else '', term.get_word(), '\n'])
+        sorted_contents = []
+
+        # Creates a tuple for each term (term, checked)
+        for term, czeched in self.contents.items():
+            sorted_contents.append((term, czeched))
+        sorted_contents.sort()
+
+        # Writes each term to the contents
+        for trm in sorted_contents:
+            line_to_write = ''.join([';' if trm[1] == Term.checked else '', trm[0], '\n'])
             filee.write(line_to_write)
 
     def post(self):
@@ -607,17 +671,24 @@ class Log:
         Prints the contents of a single log
         """
         line = []
-        contents = sorted(list(self.contentszoso.items()))
+        lines = []
+        contents = sorted(list(self.contents.items()))
         for term in contents:
-
-            line.append(term)
+            term_to_post = "".join(["" if term[1] is Term.unchecked else ";", term[0]])
+            line.append(term_to_post)
             if len(line) == 4:
-                print(" ".join(line))
+                lines.append(" ".join(line))
                 line = []
 
         if line:
-            print(f"Log {self.title}, number {self.order} in order and contains {len(self.contentszoso)}:")
-            print(" ".join(line))
+            lines.append(" ".join(line))
+
+        if lines:
+            print(f"Log: {self.title}")
+            print(f"Number: {self.order}")
+            print(f"Contains {len(self.contents)} elements:")
+            print("\n".join(lines))
+            print(" ")
 
     def in_log(self, term):
         """
@@ -625,7 +696,7 @@ class Log:
         :param term: String of term
         :return: boolean if term is in log
         """
-        return term in self.contentszoso
+        return term in self.contents
 
     def check(self, terms):
         """
@@ -636,8 +707,8 @@ class Log:
             terms = [terms]
 
         for _entr in terms:
-            if _entr in self.contentszoso:
-                self.contentszoso[_entr] = Termzoso.checked
+            if _entr in self.contents:
+                self.contents[_entr] = Term.checked
 
     def uncheck(self, terms):
         """
@@ -648,15 +719,20 @@ class Log:
             terms = [terms]
 
         for _entr in terms:
-            if _entr in self.contentszoso:
-                self.contentszoso[_entr] = Termzoso.unchecked
+            if _entr in self.contents:
+                self.contents[_entr] = Term.unchecked
 
     def is_checked(self, term):
-        if term in self.contentszoso:
-            return self.contentszoso[term] == Termzoso.checked
+        """
+        Returns if the term is checked or not
+        :param term: The term to check if it is checked
+        :return: boolean if in log
+        """
+        if term in self.contents:
+            return self.contents[term] == Term.checked
         return False
 
 
-class Termzoso(Enum):
+class Term(Enum):
     checked = 1
     unchecked = 2
