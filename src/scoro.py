@@ -3,7 +3,6 @@ import glob
 import operator
 import os
 import shutil
-import sys
 from enum import Enum
 from pathlib import Path
 
@@ -89,7 +88,7 @@ class Scoro:
     def settle(self):
         """
         Method for writing all contents to their folder.
-        If scoro was deliberately called with settle=False, this method should be called before the last line of your program
+        If src was deliberately called with settle=False, this method should be called before the last line of your program
         """
         for indx in [*self.logs.values()]:
             indx.write_contents()

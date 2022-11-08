@@ -47,7 +47,37 @@ pip install Scoro
 ```
 
 ## Usage
+For usage within your own programs, here is a quick usage:
+```
+# Creates the object
+p1 = scoro.Scoro()
 
+# Adds logs
+p1.add_log("dessert_type", "main_ingredient", "stars")
+
+# Making a bunch of dishes. Content could be what you want!
+desserts = ["cake", "pie"]
+main_ingredient = ["blueberry", "apple", "Strawberry"]
+stars = [1, 2, 3]
+
+for entry in zip(desserts, main_ingredients, stars):
+    recipe = "Recipe"
+    p1.create(entry, content=recipe)
+    
+# Unchecks all three stars
+p1.uncheck("3", log="stars")
+
+# Pulls all the three star recipes 
+p1.pull()
+
+# Prints all recipes found
+p1.post()
+
+
+```
+
+
+But, if you want to get creative, then here is the full docs:
 ```
 import Scoro
 
@@ -102,5 +132,4 @@ scoro_example.uncheck(terms, log="")
 # Reset all logs
 scoro_example.reset()
 ```
-
 
